@@ -168,8 +168,8 @@ application.properties.template   ← shows required keys, no values
 
 ```
 ┌─────────────────────┐        ┌──────────────────────┐        ┌─────────────────┐
-│   React Frontend    │◄──────►│  Spring Boot Backend  │◄──────►│   PostgreSQL DB  │
-│   (aml-ui)          │  HTTP  │  (port 8080)          │  JDBC  │   (aml_db)       │
+│   React Frontend    │◄──────►│  Spring Boot Backend │◄──────►│   PostgreSQL DB  │
+│   (aml-ui)          │  HTTP  │  (port 8080)         │  JDBC  │   (aml_db)       │
 └─────────────────────┘        └──────────┬───────────┘        └─────────────────┘
                                            │ HTTP
                                            ▼
