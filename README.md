@@ -343,6 +343,3 @@ Transaction Monitoring/
 
 ---
 
-## License
-
-Internal internship project. Not for public distribution.
