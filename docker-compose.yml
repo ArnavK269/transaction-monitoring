@@ -1,0 +1,42 @@
+services:
+
+  aml-api:
+
+    build: .
+
+    container_name: aml-api
+
+    ports:
+      - "8080:8080"
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  ml-service:
+
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+
+    container_name: aml-ml
+
+    ports:
+      - "5000:5000"
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  react-ui:
+
+    build:
+      context: ./aml-ui
+      dockerfile: Dockerfile.react
+
+    container_name: aml-react
+
+    ports:
+      - "3000:3000"
+
+    stdin_open: true
+
+    tty: true

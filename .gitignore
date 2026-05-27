@@ -1,0 +1,68 @@
+# ============================================================
+# SENSITIVE / CREDENTIALS
+# ============================================================
+
+# Spring Boot application properties with real credentials
+src/main/resources/application.properties
+src/main/resources/application-*.properties
+src/main/resources/application-*.yml
+src/main/resources/application.yml
+
+# Environment variable files — ignore real secrets, keep the example
+.env
+*.env
+!.env.example
+
+# ============================================================
+# AI / CLAUDE CODE ARTIFACTS
+# ============================================================
+
+.claude/
+CLAUDE.md
+.cursorrules
+.aider*
+copilot-instructions.md
+
+# ============================================================
+# BUILD OUTPUTS
+# ============================================================
+
+# Maven
+target/
+*.jar
+*.war
+*.class
+
+# React / Node
+aml-ui/node_modules/
+aml-ui/build/
+aml-ui/.cache/
+
+# ============================================================
+# IDE & EDITOR
+# ============================================================
+
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+*.sublime-project
+*.sublime-workspace
+
+# ============================================================
+# OS FILES
+# ============================================================
+
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============================================================
+# LOGS & TEMP
+# ============================================================
+
+*.log
+logs/
+tmp/
+temp/
