@@ -343,3 +343,7 @@ Transaction Monitoring/
 
 ---
 
+## Disclaimer
+
+This tool is a aid, not a replacement for qualified AML compliance officers. All flags must be reviewed by a licensed compliance professional before action is taken. Synthetic data is used for development and demonstration only.
+
