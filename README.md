@@ -8,17 +8,15 @@ A hybrid Anti-Money Laundering (AML) monitoring engine that combines rule-based 
 
 1. [Problem Statement](#problem-statement)
 2. [How It Was Solved](#how-it-was-solved)
-3. [Algorithm Design — Why Isolation Forest](#algorithm-design--why-isolation-forest)
-4. [Time & Space Complexity](#time--space-complexity)
-5. [Real-World Impact](#real-world-impact)
-6. [Security](#security)
-7. [Architecture](#architecture)
-8. [Features](#features)
-9. [Prerequisites](#prerequisites)
-10. [Setup](#setup)
-11. [API Reference](#api-reference)
-12. [Severity Thresholds](#severity-thresholds)
-13. [Project Structure](#project-structure)
+3. [Real-World Impact](#real-world-impact)
+4. [Security](#security)
+5. [Architecture](#architecture)
+6. [Features](#features)
+7. [Prerequisites](#prerequisites)
+8. [Setup](#setup)
+9. [API Reference](#api-reference)
+10. [Severity Thresholds](#severity-thresholds)
+11. [Project Structure](#project-structure)
 
 ---
 
@@ -86,94 +84,6 @@ The `/monitor` endpoint processes all customers and returns structured JSON aler
 - All credentials and environment-specific paths were removed from source code.
 - Moved to `application.properties` (gitignored) backed by environment variables via Spring's `${VAR}` injection.
 - A `.env.example` and `application.properties.template` are committed so any developer can onboard without being given credentials directly.
-
----
-
-## Algorithm Design — Why Isolation Forest
-
-### The Core Problem with Standard Algorithms
-
-AML anomaly detection is an **unsupervised** problem — there are no labelled "fraudulent" examples to train on. This rules out supervised classifiers immediately.
-
-### Why Isolation Forest Fits This Problem
-
-Isolation Forest works on a key insight: **anomalies are easier to isolate than normal points**. It builds an ensemble of random decision trees, each recursively splitting the feature space with random cuts. An anomalous customer (unusual combination of total amount, transaction count, cash ratio, etc.) gets isolated in very few splits — its average path length across all trees is short. Normal customers require many splits to isolate.
-
-This matches AML data precisely:
-
-1. **No labelled fraud data needed** — the model trains only on a set of known-normal behaviour profiles (`X` in `IsolationForestService.py`, covering very low risk through extreme risk patterns). It learns what "normal" looks like, not what "fraud" looks like.
-
-2. **Multivariate by design** — a customer with ₹8L total, 30 transactions, 90% cash ratio, and a high rapid ratio is flagged not because any single feature is extreme, but because the *combination* is unusual. Distance-based methods struggle with this when features are on very different scales (total amount is in lakhs; ratios are 0–1).
-
-3. **Scale-insensitive** —  This matters because `total` ranges from ₹1,000 to ₹1 Cr+ while `cashratio` ranges from 0.1 to 0.99 — mixing these in a distance metric would let the large-scale feature dominate.
-
-4. **Produces a continuous score** — `decision_function()` returns a raw anomaly score, not just "outlier / not outlier". This is normalised to 0–100 using the formula `(0.4 - score) * 120`, then clamped, giving compliance officers a graded risk signal rather than a binary flag.
-
-5. **Fast at inference** — once trained, scoring a new customer is a single path traversal across 300 trees, each of depth O(log n). This makes the `/predict` call sub-millisecond.
-
-6. **Explainability** — rule-based boosts are added on top of the raw score (`+8` for total > ₹10L, `+12` for max transaction > ₹10L, etc.), making the final score partially interpretable. A compliance officer can understand "the ML base score was 60, plus 12 for a large max transaction, plus 10 for high rapid ratio = 82 → HIGH".
-
-### Model Configuration
-
-```python
-model = IsolationForest(
-    contamination=0.08,   # 8% of training data is treated as anomalous
-    n_estimators=300,     # 300 trees — higher than the default (100) for more stable scores
-    max_samples='auto',   # uses min(256, n_samples) — fits the 18-sample training set
-    random_state=42       # reproducible results across restarts
-)
-```
-
-`contamination=0.08` means the model expects roughly 8% of customers in production to be anomalous — a deliberate conservative estimate that keeps the score sensitive without flooding analysts with false positives.
-
----
-
-## Time & Space Complexity
-
-### Rule Engine (Java — per `/monitor` call)
-
-Let **C** = number of unique customers, **T** = total transactions, **R** = total trades.
-
-| Step | Operation | Time Complexity | Space Complexity |
-|------|-----------|----------------|-----------------|
-| Load all transactions from DB | Single SQL SELECT | O(T) | O(T) |
-| Group transactions by customer | HashMap insert × T | O(T) | O(T) |
-| Apply rules per customer | Single pass over each customer's transactions | O(T) | O(1) per customer |
-| Load trades per customer | SQL SELECT with WHERE per customer | O(R) total across all C calls | O(R/C) per customer |
-| Compute trade/transaction mismatch | Sum over trades list | O(R/C) per customer | O(1) |
-| Severity classification | Constant comparisons | O(1) per customer | O(1) |
-| **Total per API call** | | **O(T + R)** | **O(T + R)** |
-
-The rule engine is **linear** in the size of the data — it makes one pass over each dataset. There is no nested looping over customers against each other, no sorting, and no recursive computation.
-
-### Isolation Forest (Python — per `/predict` call)
-
-Let **n** = training samples (18 here), **f** = features (8), **t** = `n_estimators` (300), **h** = average tree height.
-
-| Phase | Time Complexity | Space Complexity | Actual cost |
-|-------|----------------|-----------------|-------------|
-| **Training** (once, at startup) | O(t · n · log n) | O(t · n) | 300 × 18 × ~4 ≈ 21,600 ops — negligible |
-| **Inference** (per `/predict` call) | O(t · log n) | O(f) | 300 × ~4 = 1,200 ops — sub-millisecond |
-| Feature extraction in Java (before HTTP call) | O(T_c) where T_c = transactions for that customer | O(1) | Single pass to compute 8 aggregates |
-
-The theoretical average tree height for Isolation Forest is **O(log n)** — anomalies are isolated in fewer splits, normal points take more. With n=18 training samples, `log₂(18) ≈ 4.2`, so each tree traversal is extremely shallow.
-
-**Training happens once at service startup** (`model.fit(X)` at module level in `IsolationForestService.py`), not per request. Every `/predict` call only runs inference — O(t · log n) = O(300 × 4) constant-time operations regardless of how many customers or transactions exist in the database.
-
-
-The bottleneck is the **database round-trips**, not the ML model or the rule engine. The ML inference is the cheapest step.
-
-### Full Pipeline Complexity Summary
-
-| Component | Time | Space | Notes |
-|-----------|------|-------|-------|
-| Rule engine (all customers) | O(T + R) | O(T + R) | Linear in data size |
-| ML training | O(t · n · log n) | O(t · n) | Once at startup; n=18 so effectively O(1) |
-| ML inference (per customer) | O(t · log n) | O(f) | Constant — independent of DB size |
-| Frontend filtering | O(A) | O(A) | A = number of alerts returned |
-| AI search parse | O(\|query\|) | O(1) | Regex + keyword scan on the query string |
-
-Where T = total transactions, R = total trades, t = 300 trees, n = 18 training samples, f = 8 features, A = alert count.
 
 ---
 
@@ -431,10 +341,8 @@ Transaction Monitoring/
 └── README.md
 ```
 
+---
 
 ## License
 
 Internal internship project. Not for public distribution.
-#   t r a n s a c t i o n - m o n i t o r i n g 
- 
- 
